@@ -23,7 +23,6 @@ export const metadata = {
   twitter: { card: 'summary_large_image' },
   robots: { index: true, follow: true },
   alternates: { canonical: '/' },
-  icons: { icon: '/images/brand/logo.png', apple: '/images/brand/logo.png' },
 };
 
 export const viewport = { themeColor: '#0B5D34', width: 'device-width', initialScale: 1 };
