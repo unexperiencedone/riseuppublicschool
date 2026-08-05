@@ -20,7 +20,7 @@ export async function connectDB(uri = env.mongoUri) {
   if (!cache.promise) {
     cache.promise = mongoose
       .connect(uri, {
-        serverSelectionTimeoutMS: 10000,
+        serverSelectionTimeoutMS: 5000,
         maxPoolSize: 5,
       })
       .then((conn) => {
