@@ -1,12 +1,43 @@
+import { z } from 'zod';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiError from '../utils/ApiError.js';
 import { ok, created, paginated } from '../utils/ApiResponse.js';
 import { getPagination, buildSort } from '../utils/pagination.js';
 import Admission from '../models/Admission.js';
-import { saveMany } from '../services/storage.service.js';
+import { saveMany, createUploadSignature } from '../services/storage.service.js';
 import { notifyAdmissionReceived } from '../services/notification.service.js';
 import recordAudit from '../middleware/audit.js';
 import Setting from '../models/Setting.js';
+import env from '../config/env.js';
+import { fileDescriptorSchema } from '../validators/common.validator.js';
+
+const documentDescriptorSchema = fileDescriptorSchema.extend({
+  type: z.enum(['birth_certificate', 'transfer_certificate', 'report_card', 'aadhaar', 'photo', 'caste_certificate', 'other']).optional(),
+});
+function parseDocuments(raw) {
+  const result = z.array(documentDescriptorSchema).safeParse(raw || []);
+  if (!result.success) throw ApiError.unprocessable('Invalid upload descriptor', result.error.issues);
+  return result.data;
+}
+
+/**
+ * POST /admissions/upload-signature — public, rate-limited. Unlike the admin
+ * signature endpoint this needs no auth (an applicant is, by definition, not
+ * signed in yet), so the folder is hardcoded to 'admissions' rather than
+ * client-selectable — the caller cannot redirect uploads anywhere else. We
+ * chose a signed upload over an unsigned Cloudinary preset because a preset
+ * lives in the Cloudinary dashboard, outside code review, and — once its name
+ * leaks — accepts uploads from anyone indefinitely; a signature (a) is minted
+ * fresh per request, (b) is already behind the same publicFormLimiter as
+ * /admissions/apply, and (c) keeps every upload path server-signed and
+ * consistent with the admin flow instead of a second, differently-configured mechanism.
+ */
+export const createAdmissionUploadSignature = asyncHandler(async (req, res) => {
+  if (env.storage.driver !== 'cloudinary') {
+    throw ApiError.badRequest('Direct uploads require STORAGE_DRIVER=cloudinary');
+  }
+  return ok(res, await createUploadSignature('admissions'));
+});
 
 /** POST /admissions/enquiry — public, rate-limited, honeypot-protected. */
 export const createEnquiry = asyncHandler(async (req, res) => {
@@ -32,17 +63,29 @@ export const createEnquiry = asyncHandler(async (req, res) => {
   }, 'Thank you! Your enquiry has been received. Our admissions team will contact you shortly.');
 });
 
-/** POST /admissions/apply — full application with document upload. */
+/**
+ * POST /admissions/apply — full application. Either `multipart/form-data`
+ * (local dev — `data` is a JSON string field alongside the `documents` files)
+ * or `application/json` with documents already uploaded to Cloudinary.
+ */
 export const createApplication = asyncHandler(async (req, res) => {
-  const payload = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
+  const isJson = req.is('application/json');
+  const payload = isJson ? req.body : (typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body);
   const settings = await Setting.get();
 
-  const files = await saveMany(req.files || [], 'admissions');
+  let documents;
+  if (isJson) {
+    documents = parseDocuments(payload.documents).map((d) => ({ type: d.type || 'other', ...d }));
+  } else {
+    const files = await saveMany(req.files || [], 'admissions');
+    documents = files.map((f, i) => ({ type: (payload.documentTypes || [])[i] || 'other', ...f }));
+  }
+
   const admission = await Admission.create({
     ...payload,
     type: 'application',
     session: settings.currentSession,
-    documents: files.map((f, i) => ({ type: (payload.documentTypes || [])[i] || 'other', ...f })),
+    documents,
     ipAddress: req.ip,
     userAgent: req.get('user-agent'),
     statusHistory: [{ status: 'new', note: 'Online application submitted' }],

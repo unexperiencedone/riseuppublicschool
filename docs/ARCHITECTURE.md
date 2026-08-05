@@ -13,7 +13,7 @@
                 │ HTML (SSR/ISR)                   │ fetch() JSON
                 ▼                                  ▼
 ┌───────────────────────────────┐   ┌──────────────────────────────────────┐
-│   NEXT.JS 14  (Vercel)        │   │   EXPRESS API  (Render)              │
+│   NEXT.JS 14  (Vercel)        │   │   EXPRESS API  (Vercel, 2nd project) │
 │   ─────────────────────       │──▶│   ────────────────────                │
 │   • App Router, RSC           │   │   app.js  →  routes  →  controllers  │
 │   • ISR cache (revalidate)    │   │   middleware: auth, rbac, validate,   │
@@ -35,8 +35,13 @@
 ### Why the API is a separate service
 Next.js could host the routes itself, but keeping Express standalone means:
 - the same API serves a future mobile app or a third-party integration,
-- webhooks and long-running jobs are not constrained by serverless limits,
-- the school's data layer is portable if the frontend host ever changes.
+- the school's data layer is portable if the frontend host ever changes — including
+  off Vercel entirely, since `src/server.js` (`app.listen`) still runs the exact
+  same `app.js` as a normal long-running process with no code changes.
+
+(One old reason no longer applies now that the API also runs on Vercel: both
+projects share the same 30-second `maxDuration` ceiling, so this split no longer
+buys headroom for long-running jobs — see § Serverless considerations.)
 
 ---
 
@@ -313,31 +318,158 @@ money without marking the invoice paid.
 
 ## 7. Pipeline: File upload & storage
 
+Two paths exist side by side, chosen by `Content-Type`, not by a separate
+route — `middleware/upload.js#conditionalUpload` runs multer only for
+`multipart/form-data` and is a no-op (`next()`) for `application/json`:
+
 ```
-multipart/form-data
-  │
-  ├─ multer
-  │    ├─ fileFilter — MIME allowlist (images, or images+PDF/DOC for documents)
-  │    ├─ limits — 8 MB per file, 20 files max
-  │    └─ storage engine chosen by STORAGE_DRIVER:
-  │           local      → diskStorage, filename = <timestamp>-<nanoid8><ext>
-  │           cloudinary → memoryStorage, kept as a Buffer
-  │
-  ├─ controller calls saveFile(file, folder)
-  │    │
-  │    ├─ local      → returns { url:'/uploads/<name>', publicId:<name>, sizeKb }
-  │    └─ cloudinary → base64 upload → { url:secure_url, publicId, width, height }
-  │
-  ├─ the returned descriptor is embedded in the document
-  │        Notice.attachments[] · GalleryAlbum.photos[] · Staff.photo · Download.file
-  │
-  └─ on delete → deleteFile(publicId) removes the blob as well as the row
+                          POST /admin/gallery  (same path, either flow)
+                                    │
+              ┌─────────────────────┴─────────────────────┐
+              ▼                                            ▼
+   Content-Type: multipart/form-data        Content-Type: application/json
+   (local dev — `npm run dev`)              (production — Vercel)
+              │                                            │
+   ┌──────────▼──────────┐                     ┌───────────▼────────────┐
+   │ multer               │                     │ browser already holds  │
+   │  ├ fileFilter — MIME  │                     │ Cloudinary descriptors │
+   │  │  allowlist          │                     │ {url, publicId, ...}  │
+   │  ├ limits — 8MB/file,  │                     │  from web/lib/upload.js│
+   │  │  20 files max       │                     │  (see below)          │
+   │  └ storage engine:     │                     └───────────┬────────────┘
+   │     STORAGE_DRIVER     │                                 │
+   │     local → disk       │                                 │ validated against
+   │     cloudinary → memory│                                 │ fileDescriptorSchema
+   ├───────────┬───────────┘                                 │ (zod) before trust
+   ▼           │                                              │
+saveFile()/saveMany()                                         │
+   │  local      → { url:'/uploads/<name>', publicId:<name> } │
+   │  cloudinary → base64 upload → { url:secure_url, ... }    │
+   └────────────────────────┬───────────────────────────────┘
+                             ▼
+        descriptor embedded in the document
+        Notice.attachments[] · GalleryAlbum.photos[] · Staff.photo ·
+        Download.file · Student.photo · Event.cover · Admission.documents[]
+                             │
+                             ▼
+        on delete → deleteFile(publicId) removes the blob as well as the row
+        (branches on STORAGE_DRIVER, same as the create path — see § Serverless
+        considerations for why STORAGE_DRIVER=cloudinary is required in production)
 ```
 
-Controllers never branch on the storage driver. Switching from local disk to
-Cloudinary is one environment variable — which matters because **Render's
-filesystem is ephemeral**: anything uploaded to local disk disappears on the
-next deploy. Cloudinary must be configured before real photographs are uploaded.
+### The direct-to-Cloudinary flow (production)
+
+Vercel's Node runtime has a **hard 4.5 MB request body limit** that cannot be
+raised — an album upload or a scanned admission document routinely exceeds
+that. So on Vercel, files never go through the API's body at all:
+
+```
+1. Browser calls  POST /admin/uploads/signature  (auth+CMS)
+                or POST /admissions/upload-signature  (public, rate-limited)
+     └─ server signs { timestamp, folder, allowed_formats } with
+        CLOUDINARY_API_SECRET — the secret itself never reaches the browser
+
+2. Browser POSTs the file straight to
+     https://api.cloudinary.com/v1_1/<cloud>/auto/upload
+   with the signed params attached (web/lib/upload.js) — this request never
+   touches our API or its 4.5 MB ceiling
+
+3. Cloudinary returns { secure_url, public_id, bytes, width, height, ... }
+
+4. Browser POSTs that small JSON descriptor to the SAME admin route it would
+   have used for multipart (e.g. POST /admin/gallery), just with
+   Content-Type: application/json — the controller detects this via
+   req.is('application/json') and stores the descriptor directly instead of
+   calling saveFile()
+```
+
+Controllers never branch on the storage driver itself (local vs cloudinary) —
+that's still centralised in `storage.service.js`. They only branch on
+*transport* (multipart vs JSON), and only because two genuinely different
+delivery mechanisms exist now. Switching `STORAGE_DRIVER` between `local` and
+`cloudinary` remains a one-variable change for the multipart path.
+
+---
+
+## 7A. Serverless considerations (Vercel)
+
+Both the API and the frontend run as Vercel projects (root directories
+`server/` and `web/`), which changes several assumptions that held when the
+API was a single long-running Render process.
+
+**The entry point is not `src/server.js`.** That file still calls
+`app.listen()` and remains the entry point for `npm run dev` and any
+long-running host — it is untouched. Vercel instead calls `server/api/index.js`,
+which imports the same `app.js`, awaits a cached DB connection, and delegates
+the request to it: `return app(req, res)`. `server/vercel.json` rewrites every
+path to that one function so `/health`, `/api/v1/*` and everything else hit
+it identically to how they hit the Express listener locally.
+
+**Cold starts and connection pooling.** A cold start pays for a fresh Node
+process, a fresh Mongoose connection, and (for MONGODB_URI on Atlas) a fresh
+TLS handshake — all before the first query runs. Two mitigations are in
+place:
+- `src/config/db.js` caches the connection *promise* on `globalThis`, not a
+  module-level variable, because a warm invocation may reuse the same
+  process but reload the module graph — `globalThis` is the one thing
+  guaranteed to survive either way. A warm invocation reuses the connection
+  in ~0 ms; only a genuine cold start pays the Atlas round-trip.
+- `maxPoolSize` is lowered from 10 to 5. Every concurrent lambda opens its
+  own pool, and Atlas M0 caps total connections at 500 — a traffic spike
+  that spins up 50+ concurrent cold starts at `maxPoolSize:10` could exhaust
+  that budget outright; 5 gives more headroom per instance at a small
+  latency cost under heavy per-instance concurrency (which this workload
+  doesn't have — each request is short-lived).
+
+**The 4.5 MB request body limit** is the reason the upload pipeline (§7) now
+has two paths. It is not configurable — raising `express.json({ limit })` or
+multer's `fileSize` does nothing on Vercel; the platform rejects the request
+before it reaches the function. Direct-to-Cloudinary upload is the fix, not
+a workaround.
+
+**`maxDuration: 30`** (in `vercel.json`) is the ceiling for every request,
+including the Razorpay webhook and the admission-application write. Nothing
+in this codebase currently approaches that — the slowest path (bulk
+attendance `bulkWrite`, or seeding) is either not on the request path or not
+deployed as a function at all (`npm run seed` runs locally / via a one-off
+script, not as a Vercel function). If a future feature needs longer (e.g.
+PDF report-card generation, per the roadmap), it will need a queue
+(§16 Known gaps already flags "no background job queue") rather than a
+bigger `maxDuration`.
+
+**Rate limiting requires Upstash in production.** `middleware/rateLimiter.js`
+falls back to express-rate-limit's in-memory store when
+`UPSTASH_REDIS_REST_URL`/`_TOKEN` are unset — correct for `npm run dev`
+(one process, one memory space) but silently meaningless once deployed,
+because every Vercel invocation is an independent process: an attacker
+distributed across enough cold starts would never see a 429. Set both
+Upstash variables before relying on `authLimiter` / `publicFormLimiter` /
+`apiLimiter` in production. One behavioural difference to know about: the
+in-memory `authLimiter` uses `skipSuccessfulRequests` (only failed logins
+count toward the 10/15min budget); the Upstash-backed version counts every
+attempt, because Upstash's sliding-window algorithm has no "uncount this"
+operation. Stricter, never looser — see the comment in that file.
+
+**The Razorpay webhook's raw body is not deploy-verified.** `express.raw()`
+reads the request stream directly and never touches Vercel's lazy `req.body`
+getter, so by that reasoning the raw bytes should survive untouched — but
+this project could not confirm that against an actual Vercel deployment.
+`routes/webhook.routes.js` now logs loudly (`Razorpay webhook: req.body was
+not a raw Buffer...`) if that assumption turns out to be wrong instead of
+failing silently. **Action item before enabling `PAYMENTS_DRIVER=razorpay`
+in production:** send one real or Razorpay-dashboard-test webhook to the
+deployed endpoint and confirm the log line is `Razorpay webhook:
+payment.captured`, not `Rejected Razorpay webhook: bad signature`.
+
+**`STORAGE_DRIVER` must be `cloudinary` in production, not just "supported".**
+It isn't only a feature choice anymore: Vercel's filesystem is read-only
+outside `/tmp`, so `STORAGE_DRIVER=local` cannot work at all once deployed,
+and `deleteFile()` branches on this same flag to decide whether to call
+Cloudinary's `destroy` or `fs.unlink` — since every direct-to-Cloudinary
+upload's `publicId` is a Cloudinary id, `deleteFile` only works if
+`STORAGE_DRIVER=cloudinary` is actually set. `express.static('/uploads')` in
+`app.js` is now guarded behind `STORAGE_DRIVER === 'local'` so it doesn't
+mount pointlessly (and harmlessly) on Vercel.
 
 ---
 
@@ -496,7 +628,8 @@ full stack, so log noise stays meaningful.
 | XSS | React escapes by default; `dangerouslySetInnerHTML` used only for our own JSON-LD | frontend |
 | CSRF | Bearer token in a header (not a cookie) for state changes; refresh cookie is `sameSite` + httpOnly | `token.js` |
 | Form spam | Honeypot field + 10 submissions / hour / IP | `enquirySchema`, `publicFormLimiter` |
-| Malicious upload | MIME allowlist, 8 MB cap, 20 file cap, randomised filenames | `upload.js` |
+| Malicious upload (multipart, local dev) | MIME allowlist, 8 MB cap, 20 file cap, randomised filenames | `upload.js` |
+| Malicious upload (JSON / direct-to-Cloudinary, production) | Signed `folder` + `allowed_formats` (server-chosen, client cannot alter without invalidating the signature); size cap is **not** enforced by a signed param — set a file-size limit in the Cloudinary account settings before relying on this in production | `storage.service.js#createUploadSignature` |
 | Forged payment | HMAC verified with `timingSafeEqual` on both callback and webhook | `payment.service.js` |
 | Parameter pollution | `hpp` | `app.js` |
 | Privilege escalation | `requireRole` on every admin route + row-level `assertAccess` in portal controllers | `rbac.js`, `portal.controller.js` |
@@ -515,7 +648,8 @@ The system runs end-to-end with zero third-party credentials.
 
 | Variable | Values | Default | Effect of the default |
 |---|---|---|---|
-| `STORAGE_DRIVER` | `local` \| `cloudinary` | `local` | Files written to `./uploads`, served by express.static |
+| `STORAGE_DRIVER` | `local` \| `cloudinary` | `local` | Files written to `./uploads`, served by express.static. **Must** be `cloudinary` in production/Vercel — `local` cannot work there at all (§7A) |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | — | unset | Rate limiters use express-rate-limit's in-memory store — meaningless across separate Vercel invocations (§7A) |
 | `MAIL_DRIVER` | `log` \| `smtp` | `log` | Emails printed to the console — no risk of mailing real parents from a dev box |
 | `SMS_DRIVER` | `log` \| `msg91` | `log` | SMS printed to the console |
 | `WHATSAPP_DRIVER` | `log` \| `meta` | `log` | WhatsApp printed to the console |
@@ -529,39 +663,45 @@ imported lazily inside their service functions and only when the live driver is 
 
 ## 14. Deployment pipeline
 
+Both apps deploy from the same monorepo as **two separate Vercel projects**,
+each with its own root directory. Full step-by-step in `docs/DEPLOYMENT.md`;
+this is the shape of it:
+
 ```
 git push origin main
    │
    ├──────────────────────────────┬──────────────────────────────┐
    ▼                              ▼                              ▼
-VERCEL (web/)               RENDER (server/)              MONGODB ATLAS
-├ npm install               ├ npm install                 ├ M0 free tier
-├ next build                ├ node src/src/server.js      ├ IP allowlist:
-│   ├ static pages          ├ health check /health        │   Render egress IPs
-│   ├ ISR pages             ├ auto-deploy on push         ├ daily backups
-│   └ sitemap + robots      └ env vars from dashboard     └ separate prod user
-└ global CDN
+VERCEL PROJECT 1 (web/)      VERCEL PROJECT 2 (server/)     MONGODB ATLAS
+├ npm install                ├ npm install                  ├ M0 free tier
+├ next build                 ├ vercel.json rewrites          ├ IP allowlist: 0.0.0.0/0
+│   ├ static pages           │   /(.*) → api/index.js        │   (no fixed Vercel
+│   ├ ISR pages              ├ api/index.js: connectDB()     │    egress range)
+│   └ sitemap + robots       │   then delegates to app.js    ├ daily backups
+└ global CDN                 └ env vars from dashboard       └ separate prod user
 
-Environment variables that must match across services:
-  CLIENT_URL (Render)  ==  the Vercel production domain
-  NEXT_PUBLIC_API_URL (Vercel)  ==  https://<render-app>.onrender.com/api/v1
-  NEXT_PUBLIC_SITE_URL (Vercel) ==  the Vercel production domain
+Environment variables that must match across projects:
+  CLIENT_URL / ADMIN_URL (server project) ==  the web project's production domain
+  NEXT_PUBLIC_API_URL (web project)  ==  https://<server-project>.vercel.app/api/v1
+  NEXT_PUBLIC_SITE_URL (web project) ==  the web project's production domain
 Mismatch → CORS failures that look like network errors in the browser console.
 ```
 
 ### First-deploy order
-1. Create the Atlas cluster, database user and IP allowlist.
-2. Deploy the API to Render with `MONGODB_URI`; confirm `/health` returns 200.
-3. Run `npm run seed` once (Render Shell) to create settings, pages, calendar, gallery and the admin account.
-4. Deploy the frontend to Vercel with `NEXT_PUBLIC_API_URL` pointing at Render.
-5. Set `CLIENT_URL` on Render to the Vercel domain and redeploy the API.
+1. Create the Atlas cluster, database user and IP allowlist (`0.0.0.0/0` — Vercel has no fixed egress range to allowlist instead).
+2. Deploy the API as its own Vercel project (root directory `server/`) with `MONGODB_URI`, `STORAGE_DRIVER=cloudinary` + Cloudinary credentials, and (recommended) `UPSTASH_REDIS_REST_URL`/`_TOKEN`; confirm `/health` returns 200.
+3. Run `npm run seed` **locally** against that same `MONGODB_URI` — there is no long-running shell to exec into on Vercel the way Render offered one.
+4. Deploy the frontend as a second Vercel project (root directory `web/`) with `NEXT_PUBLIC_API_URL` pointing at the API project's domain.
+5. Set `CLIENT_URL` / `ADMIN_URL` on the API project to the frontend's domain and redeploy it.
 6. Sign in to `/admin/login` and **change the seeded password immediately**.
+7. Send a test Razorpay webhook to the deployed endpoint before enabling `PAYMENTS_DRIVER=razorpay` — see § Serverless considerations.
 
-### Free-tier caveat
-Render's free instances sleep after 15 minutes of inactivity and take
-30–60 seconds to wake. The frontend's fallback content means visitors still see a
-complete site during a cold start — but before the school advertises the URL,
-either upgrade to a paid instance or add an external uptime pinger.
+### Cold starts
+Vercel's Hobby-tier functions also cold-start after a period of inactivity —
+same shape of problem as Render's free tier had. The frontend's fallback
+content (`web/lib/fallback.js`) means visitors still see a complete site
+during one. Connection caching (§7A) keeps a *warm* invocation fast; it does
+nothing for the first request after a cold start.
 
 ---
 

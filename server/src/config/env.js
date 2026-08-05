@@ -82,6 +82,14 @@ export const env = {
     max: num(process.env.RATE_LIMIT_MAX, 300),
     publicFormMax: num(process.env.PUBLIC_FORM_LIMIT_MAX, 10),
   },
+
+  // Shared rate-limit store for serverless deployments. Unset → falls back to
+  // express-rate-limit's in-memory store (fine for `npm run dev`, meaningless
+  // across independent Vercel lambdas). See middleware/rateLimiter.js.
+  upstash: {
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  },
 };
 
 export default env;

@@ -52,8 +52,12 @@ app.use(compression());
 if (!env.isProd) app.use(morgan('dev'));
 else app.use(morgan('combined'));
 
-/* ── 7. Static uploads (local storage driver only) ── */
-app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '30d', etag: true }));
+/* ── 7. Static uploads (local storage driver only — dead weight on Vercel,
+   whose filesystem is read-only outside /tmp, so this mount is skipped
+   entirely unless STORAGE_DRIVER=local) ── */
+if (env.storage.driver === 'local') {
+  app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '30d', etag: true }));
+}
 
 /* ── 8. Health & readiness probes ── */
 app.get('/health', (_req, res) => res.json({

@@ -8,7 +8,7 @@ import { adminDashboard } from '../controllers/dashboard.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import validate from '../middleware/validate.js';
-import { uploadImage, uploadDocument } from '../middleware/upload.js';
+import { uploadImage, uploadDocument, conditionalUpload } from '../middleware/upload.js';
 import { ROLES, CMS_ROLES } from '../utils/constants.js';
 import { listQuery, idParam } from '../validators/common.validator.js';
 import { noticeSchema, eventSchema, albumSchema, staffSchema } from '../validators/content.validator.js';
@@ -25,30 +25,33 @@ const finance = requireRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.ACCOUNTANT]);
 /* Dashboard */
 router.get('/dashboard', cms, adminDashboard);
 
-/* Notices */
-router.post('/notices', cms, uploadDocument.array('attachments', 5), validate({ body: noticeSchema }), content.createNotice);
-router.patch('/notices/:id', cms, uploadDocument.array('attachments', 5), validate({ params: idParam }), content.updateNotice);
+/* Direct-to-Cloudinary uploads (see docs/ARCHITECTURE.md § Serverless considerations) */
+router.post('/uploads/signature', cms, content.getUploadSignature);
+
+/* Notices — multipart (local dev) or JSON with pre-uploaded attachments[] (see middleware/upload.js#conditionalUpload) */
+router.post('/notices', cms, conditionalUpload(uploadDocument.array('attachments', 5)), validate({ body: noticeSchema }), content.createNotice);
+router.patch('/notices/:id', cms, conditionalUpload(uploadDocument.array('attachments', 5)), validate({ params: idParam }), content.updateNotice);
 router.delete('/notices/:id', cms, validate({ params: idParam }), content.deleteNotice);
 
 /* Events */
-router.post('/events', cms, uploadImage.single('cover'), validate({ body: eventSchema }), content.createEvent);
-router.patch('/events/:id', cms, uploadImage.single('cover'), validate({ params: idParam }), content.updateEvent);
+router.post('/events', cms, conditionalUpload(uploadImage.single('cover')), validate({ body: eventSchema }), content.createEvent);
+router.patch('/events/:id', cms, conditionalUpload(uploadImage.single('cover')), validate({ params: idParam }), content.updateEvent);
 router.delete('/events/:id', cms, validate({ params: idParam }), content.deleteEvent);
 
 /* Gallery */
-router.post('/gallery', cms, uploadImage.array('photos', 20), validate({ body: albumSchema }), content.createAlbum);
-router.post('/gallery/:id/photos', cms, uploadImage.array('photos', 20), validate({ params: idParam }), content.addAlbumPhotos);
+router.post('/gallery', cms, conditionalUpload(uploadImage.array('photos', 20)), validate({ body: albumSchema }), content.createAlbum);
+router.post('/gallery/:id/photos', cms, conditionalUpload(uploadImage.array('photos', 20)), validate({ params: idParam }), content.addAlbumPhotos);
 router.delete('/gallery/:id/photos/:photoId', cms, content.deleteAlbumPhoto);
 router.delete('/gallery/:id', cms, validate({ params: idParam }), content.deleteAlbum);
 
 /* Staff */
-router.post('/staff', cms, uploadImage.single('photo'), validate({ body: staffSchema }), content.createStaff);
-router.patch('/staff/:id', cms, uploadImage.single('photo'), validate({ params: idParam }), content.updateStaff);
+router.post('/staff', cms, conditionalUpload(uploadImage.single('photo')), validate({ body: staffSchema }), content.createStaff);
+router.patch('/staff/:id', cms, conditionalUpload(uploadImage.single('photo')), validate({ params: idParam }), content.updateStaff);
 router.delete('/staff/:id', cms, validate({ params: idParam }), content.deleteStaff);
 
 /* Pages, downloads, testimonials, settings */
 router.put('/pages/:key', cms, content.upsertPage);
-router.post('/downloads', cms, uploadDocument.single('file'), content.createDownload);
+router.post('/downloads', cms, conditionalUpload(uploadDocument.single('file')), content.createDownload);
 router.delete('/downloads/:id', cms, validate({ params: idParam }), content.deleteDownload);
 router.patch('/testimonials/:id', cms, validate({ params: idParam }), content.moderateTestimonial);
 router.patch('/settings', requireRole([ROLES.SUPER_ADMIN, ROLES.ADMIN]), content.updateSettings);
@@ -67,8 +70,8 @@ router.patch('/messages/:id', cms, validate({ params: idParam }), content.update
 /* Students */
 router.get('/students', staffOnly, validate({ query: listQuery }), student.listStudents);
 router.get('/students/:id', staffOnly, validate({ params: idParam }), student.getStudent);
-router.post('/students', cms, uploadImage.single('photo'), student.createStudent);
-router.patch('/students/:id', cms, uploadImage.single('photo'), validate({ params: idParam }), student.updateStudent);
+router.post('/students', cms, conditionalUpload(uploadImage.single('photo')), student.createStudent);
+router.patch('/students/:id', cms, conditionalUpload(uploadImage.single('photo')), validate({ params: idParam }), student.updateStudent);
 router.delete('/students/:id', requireRole([ROLES.SUPER_ADMIN, ROLES.ADMIN]), validate({ params: idParam }), student.deleteStudent);
 router.post('/students/:id/portal-access', cms, validate({ params: idParam }), student.grantPortalAccess);
 router.post('/students/from-admission/:admissionId', cms, student.enrolFromAdmission);

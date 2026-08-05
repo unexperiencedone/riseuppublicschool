@@ -2,9 +2,9 @@
 ### Rise UP Public School — REST API v1
 
 Base URL (dev): `http://localhost:5000/api/v1`
-Base URL (prod): `https://<your-api>.onrender.com/api/v1`
+Base URL (prod): `https://<your-server-project>.vercel.app/api/v1` — deployed as its own Vercel project, root directory `server/` (see `docs/DEPLOYMENT.md`)
 
-**79 routes** across 4 groups. Every route below is implemented in `server/src/routes/`.
+**81 routes** across 4 groups. Every route below is implemented in `server/src/routes/`.
 
 | Group | Prefix | Auth | Purpose |
 |---|---|---|---|
@@ -36,6 +36,16 @@ Base URL (prod): `https://<your-api>.onrender.com/api/v1`
 **Roles** — `super_admin` · `admin` · `principal` · `teacher` · `accountant` · `student` · `parent`
 
 **Common list query params** — `?page=1&limit=12&sort=-createdAt&search=&category=&session=2026-27&from=&to=`
+
+**File uploads — two transports, same routes.** Every route that accepts a
+file (marked *multipart/JSON* below) accepts either:
+- `multipart/form-data` — the original path, still used by `npm run dev` locally.
+- `application/json` — production (Vercel). The browser uploads straight to
+  Cloudinary first (see §5.2a and §3.6a), then POSTs the small resulting
+  descriptor(s) — `{ url, publicId, mime, sizeKb, width, height, name }` — to
+  the same route and method shown below. Vercel's Node functions have a hard
+  4.5 MB request body limit, so real files never pass through the API on
+  that transport. Full flow in `docs/ARCHITECTURE.md` §7 and §7A.
 
 ---
 
@@ -131,7 +141,8 @@ Categories: `academic` `cultural` `sports` `holiday` `exam` `ptm` `celebration` 
 | Method | Path | Rate limit | Description |
 |---|---|---|---|
 | `POST` | `/admissions/enquiry` | 10 / hour | Lightweight enquiry. Honeypot + DPDP consent required. Returns an application number. |
-| `POST` | `/admissions/apply` | 10 / hour | Full application, `multipart/form-data`, up to 8 documents. |
+| `POST` | `/admissions/apply` | 10 / hour | Full application. *multipart/JSON* — up to 8 documents. |
+| `POST` | `/admissions/upload-signature` | 10 / hour | §3.6a below. Public — no auth, since an applicant isn't signed in yet. Folder is hardcoded to `admissions`, not caller-selectable. |
 | `GET` | `/admissions/track/:applicationNo` | — | Status lookup. Requires `?phone=` matching the record — acts as the shared secret. |
 
 <details><summary><code>POST /admissions/enquiry</code> — request / response</summary>
@@ -157,10 +168,42 @@ Categories: `academic` `cultural` `sports` `holiday` `exam` `ptm` `celebration` 
   "data": { "applicationNo": "RUPS/2026/00001", "id": "66b1f..." } }
 ```
 
-**`POST /admissions/apply`** uses `multipart/form-data`:
+**`POST /admissions/apply`** — `multipart/form-data` variant (local dev):
 - `data` — JSON string with the same shape as above
 - `documentTypes[]` — parallel array: `birth_certificate` `transfer_certificate` `report_card` `aadhaar` `photo` `caste_certificate` `other`
 - `documents` — up to 8 files (PDF / JPEG / PNG / WebP, ≤ 8 MB each)
+
+**`POST /admissions/apply`** — `application/json` variant (production): the
+same top-level shape as the enquiry above, plus `documents`, each already
+uploaded via §3.6a:
+```jsonc
+{ "student": { /* ... */ }, "parent": { /* ... */ }, "consent": true,
+  "documents": [
+    { "type": "birth_certificate", "url": "https://res.cloudinary.com/.../birth.pdf",
+      "publicId": "riseup-school/admissions/abc123", "mime": "application/pdf", "sizeKb": 340 }
+  ] }
+```
+</details>
+
+### 3.6a Direct upload signature (public)
+
+<details><summary><code>POST /admissions/upload-signature</code> — request / response</summary>
+
+```jsonc
+// Request — empty body, no auth
+{}
+
+// 200
+{ "success": true, "data": {
+    "timestamp": 1785900000, "signature": "9c2f...",
+    "apiKey": "123456789012345", "cloudName": "riseup-school",
+    "folder": "riseup-school/admissions", "allowedFormats": "jpg,jpeg,png,webp,avif,pdf,doc,docx"
+} }
+```
+The browser then POSTs the file, together with these exact fields, straight
+to `https://api.cloudinary.com/v1_1/<cloudName>/auto/upload` — see
+`web/lib/upload.js`. `folder` and `allowedFormats` are part of the signed
+payload; changing either before upload invalidates the signature.
 </details>
 
 ### 3.7 Contact
@@ -228,24 +271,45 @@ Role shorthands used below:
 
 | Method | Path | Roles | Body | Description |
 |---|---|---|---|---|
-| `POST` | `/admin/notices` | CMS | multipart | Create a notice, up to 5 attachments. Auto-generates a unique slug and excerpt. |
-| `PATCH` | `/admin/notices/:id` | CMS | multipart | Update. Regenerates the slug if the title changes. |
+| `POST` | `/admin/uploads/signature` | CMS | json | §5.2a below. `{ "folder": "gallery" }` — folder must be one of `gallery` `notices` `events` `staff` `downloads` `students`, else falls back to `misc`. |
+| `POST` | `/admin/notices` | CMS | multipart/JSON | Create a notice, up to 5 attachments. Auto-generates a unique slug and excerpt. |
+| `PATCH` | `/admin/notices/:id` | CMS | multipart/JSON | Update. Regenerates the slug if the title changes. |
 | `DELETE` | `/admin/notices/:id` | CMS | — | Deletes the notice and its stored attachments. |
-| `POST` | `/admin/events` | CMS | multipart | Create an event with an optional cover image. |
-| `PATCH` | `/admin/events/:id` | CMS | multipart | Update. |
+| `POST` | `/admin/events` | CMS | multipart/JSON | Create an event with an optional cover image. |
+| `PATCH` | `/admin/events/:id` | CMS | multipart/JSON | Update. |
 | `DELETE` | `/admin/events/:id` | CMS | — | Delete + remove cover from storage. |
-| `POST` | `/admin/gallery` | CMS | multipart | Create an album, up to 20 photos. First photo becomes the cover. |
-| `POST` | `/admin/gallery/:id/photos` | CMS | multipart | Append up to 20 photos to an existing album. |
+| `POST` | `/admin/gallery` | CMS | multipart/JSON | Create an album, up to 20 photos. First photo becomes the cover. |
+| `POST` | `/admin/gallery/:id/photos` | CMS | multipart/JSON | Append up to 20 photos to an existing album. |
 | `DELETE` | `/admin/gallery/:id/photos/:photoId` | CMS | — | Remove one photo (also deletes it from storage). |
 | `DELETE` | `/admin/gallery/:id` | CMS | — | Delete the album and every stored photo. |
-| `POST` | `/admin/staff` | CMS | multipart | Add a staff member with a photo. |
-| `PATCH` | `/admin/staff/:id` | CMS | multipart | Update. |
+| `POST` | `/admin/staff` | CMS | multipart/JSON | Add a staff member with a photo. |
+| `PATCH` | `/admin/staff/:id` | CMS | multipart/JSON | Update. |
 | `DELETE` | `/admin/staff/:id` | CMS | — | Remove. |
 | `PUT` | `/admin/pages/:key` | CMS | json | Upsert a CMS page. |
-| `POST` | `/admin/downloads` | CMS | multipart | Upload a document. **Upload mandatory-disclosure PDFs here** with `category=mandatory_disclosure`. |
+| `POST` | `/admin/downloads` | CMS | multipart/JSON | Upload a document. **Upload mandatory-disclosure PDFs here** with `category=mandatory_disclosure`. |
 | `DELETE` | `/admin/downloads/:id` | CMS | — | Delete. |
 | `PATCH` | `/admin/testimonials/:id` | CMS | json | `{ "isApproved": true }` — moderate. |
 | `PATCH` | `/admin/settings` | OWNER | json | Update site settings (school profile, contacts, toggles, announcement bar). |
+
+### 5.2a Direct upload signature (admin)
+
+<details><summary><code>POST /admin/uploads/signature</code> — request / response</summary>
+
+```jsonc
+// Request
+{ "folder": "gallery" }
+
+// 200
+{ "success": true, "data": {
+    "timestamp": 1785900000, "signature": "4a1e...",
+    "apiKey": "123456789012345", "cloudName": "riseup-school",
+    "folder": "riseup-school/gallery", "allowedFormats": "jpg,jpeg,png,webp,avif"
+} }
+```
+400s with `Direct uploads require STORAGE_DRIVER=cloudinary` if the API isn't
+configured for it yet — this is the local-dev default, so the admin panel's
+upload UI should expect that response while `STORAGE_DRIVER=local`.
+</details>
 
 ### 5.3 Admissions CRM
 
@@ -272,8 +336,8 @@ Pipeline: `new` → `contacted` → `documents_pending` → `shortlisted` → `a
 |---|---|---|---|
 | `GET` | `/admin/students` | STAFF | Paginated. `?classLevel=&section=&session=&status=&search=` |
 | `GET` | `/admin/students/:id` | STAFF | Full record + linked user account. |
-| `POST` | `/admin/students` | CMS | Enrol a student (multipart, with photo). |
-| `PATCH` | `/admin/students/:id` | CMS | Update. |
+| `POST` | `/admin/students` | CMS | Enrol a student. *multipart/JSON* — optional photo. |
+| `PATCH` | `/admin/students/:id` | CMS | Update. *multipart/JSON*. |
 | `DELETE` | `/admin/students/:id` | OWNER | **Soft delete** — sets `status: inactive`. Academic history is never destroyed. |
 | `POST` | `/admin/students/:id/portal-access` | CMS | Creates/links a parent account, generates a temporary password, emails credentials. |
 | `POST` | `/admin/students/from-admission/:admissionId` | CMS | Converts an `admitted` application into a Student record with a generated admission number. |
@@ -331,7 +395,11 @@ Exam types: `unit_test_1` `unit_test_2` `unit_test_3` `unit_test_4` `half_yearly
 | `POST` | `/webhooks/razorpay` | `X-Razorpay-Signature` HMAC | Source of truth for payment state. Mounted **before** `express.json()` so the raw body is available for signature verification. Always returns 200 quickly. Handles `payment.captured` and `payment.failed`. Idempotent. |
 
 Configure in the Razorpay dashboard → Settings → Webhooks:
-`https://<your-api>.onrender.com/api/v1/webhooks/razorpay`
+`https://<your-server-project>.vercel.app/api/v1/webhooks/razorpay`
+
+⚠️ Raw-body handling on Vercel was not verified against a live deployment —
+send one test webhook and check the API logs before enabling
+`PAYMENTS_DRIVER=razorpay` in production. See `docs/ARCHITECTURE.md` §7A.
 
 ---
 
@@ -364,7 +432,8 @@ Each one is already abstracted behind a service in `server/src/services/`, with 
 |---|---|---|---|---|---|
 | 1 | **MongoDB Atlas** | Primary database | `MONGODB_URI` | `config/db.js` | Required |
 | 2 | **Razorpay** | Fee & application-fee payments (UPI, cards, netbanking) | `PAYMENTS_DRIVER=razorpay` `RAZORPAY_KEY_ID` `RAZORPAY_KEY_SECRET` `RAZORPAY_WEBHOOK_SECRET` | `services/payment.service.js` | Mocked |
-| 3 | **Cloudinary** | Image/document CDN, on-the-fly resizing | `STORAGE_DRIVER=cloudinary` `CLOUDINARY_CLOUD_NAME` `CLOUDINARY_API_KEY` `CLOUDINARY_API_SECRET` | `services/storage.service.js` | Local driver active |
+| 3 | **Cloudinary** | Image/document CDN, on-the-fly resizing, direct browser uploads (§5.2a / §3.6a) | `STORAGE_DRIVER=cloudinary` `CLOUDINARY_CLOUD_NAME` `CLOUDINARY_API_KEY` `CLOUDINARY_API_SECRET` | `services/storage.service.js` | Local driver active in dev — **required** in production (Vercel's filesystem can't take `local`) |
+| — | **Upstash Redis** | Shared rate-limit store across serverless invocations | `UPSTASH_REDIS_REST_URL` `UPSTASH_REDIS_REST_TOKEN` | `middleware/rateLimiter.js` | In-memory fallback active — rate limiting is a no-op in production without this |
 | 4 | **SMTP** (Gmail / Brevo / Resend) | Transactional email — enquiry confirmations, receipts, portal credentials, password resets | `MAIL_DRIVER=smtp` `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `MAIL_FROM` | `services/email.service.js` | Log driver active |
 | 5 | **MSG91** | Transactional SMS (DLT-registered templates required in India) | `SMS_DRIVER=msg91` `MSG91_AUTH_KEY` `MSG91_SENDER_ID` `MSG91_TEMPLATE_*` | `services/sms.service.js` | Log driver active |
 | 6 | **Meta WhatsApp Cloud API** | WhatsApp notices, fee reminders, result alerts | `WHATSAPP_DRIVER=meta` `WHATSAPP_PHONE_NUMBER_ID` `WHATSAPP_TOKEN` | `services/whatsapp.service.js` | Log driver active |

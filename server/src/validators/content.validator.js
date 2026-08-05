@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { NOTICE_CATEGORIES, EVENT_CATEGORIES } from '../utils/constants.js';
+import { fileDescriptorSchema } from './common.validator.js';
 
 export const noticeSchema = z.object({
   title: z.string().min(4).max(200),
@@ -12,6 +13,8 @@ export const noticeSchema = z.object({
   isPublished: z.coerce.boolean().default(true),
   publishAt: z.coerce.date().optional(),
   expiresAt: z.coerce.date().optional(),
+  // JSON-body variant only — ignored for multipart requests (files arrive via req.files instead).
+  attachments: z.array(fileDescriptorSchema).optional(),
 });
 
 export const eventSchema = z.object({
@@ -25,6 +28,8 @@ export const eventSchema = z.object({
   session: z.string().optional(),
   isHoliday: z.coerce.boolean().default(false),
   isPublished: z.coerce.boolean().default(true),
+  // JSON-body variant only.
+  cover: fileDescriptorSchema.optional(),
 });
 
 export const albumSchema = z.object({
@@ -34,6 +39,8 @@ export const albumSchema = z.object({
   eventDate: z.coerce.date().optional(),
   isPublished: z.coerce.boolean().default(true),
   displayOrder: z.coerce.number().default(100),
+  // JSON-body variant only.
+  photos: z.array(fileDescriptorSchema).optional(),
 });
 
 export const contactSchema = z.object({
@@ -60,6 +67,8 @@ export const staffSchema = z.object({
   bio: z.string().max(1500).optional(),
   displayOrder: z.coerce.number().default(100),
   showOnWebsite: z.coerce.boolean().default(true),
+  // JSON-body variant only.
+  photo: fileDescriptorSchema.optional(),
 });
 
 export const testimonialSchema = z.object({

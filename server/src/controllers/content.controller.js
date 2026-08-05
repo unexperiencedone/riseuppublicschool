@@ -1,14 +1,45 @@
+import { z } from 'zod';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiError from '../utils/ApiError.js';
 import { ok, created, paginated } from '../utils/ApiResponse.js';
 import { getPagination, buildSort } from '../utils/pagination.js';
 import { uniqueSlug } from '../utils/slug.js';
-import { saveFile, saveMany, deleteFile } from '../services/storage.service.js';
+import { saveFile, saveMany, deleteFile, createUploadSignature } from '../services/storage.service.js';
 import { notifyContactMessage } from '../services/notification.service.js';
 import recordAudit from '../middleware/audit.js';
+import env from '../config/env.js';
+import { fileDescriptorSchema } from '../validators/common.validator.js';
 import {
   Notice, Event, GalleryAlbum, ContactMessage, Page, Download, Testimonial, Staff, Setting,
 } from '../models/index.js';
+
+/**
+ * Validates a JSON-body upload descriptor (already uploaded to Cloudinary by
+ * the browser — see web/lib/upload.js) before it's trusted and persisted.
+ * Multipart requests never hit these; their files go through multer + saveFile/saveMany.
+ */
+function parseDescriptor(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const result = fileDescriptorSchema.safeParse(raw);
+  if (!result.success) throw ApiError.unprocessable('Invalid upload descriptor', result.error.issues);
+  return result.data;
+}
+function parseDescriptors(raw) {
+  const result = z.array(fileDescriptorSchema).safeParse(raw || []);
+  if (!result.success) throw ApiError.unprocessable('Invalid upload descriptor', result.error.issues);
+  return result.data;
+}
+
+const ADMIN_UPLOAD_FOLDERS = ['gallery', 'notices', 'events', 'staff', 'downloads', 'students'];
+
+/** POST /admin/uploads/signature — signed payload for a direct browser → Cloudinary upload. */
+export const getUploadSignature = asyncHandler(async (req, res) => {
+  if (env.storage.driver !== 'cloudinary') {
+    throw ApiError.badRequest('Direct uploads require STORAGE_DRIVER=cloudinary');
+  }
+  const folder = ADMIN_UPLOAD_FOLDERS.includes(req.body.folder) ? req.body.folder : 'misc';
+  return ok(res, await createUploadSignature(folder));
+});
 
 /* ─────────────────────────── NOTICES ─────────────────────────── */
 
@@ -44,13 +75,14 @@ export const getNotice = asyncHandler(async (req, res) => {
   return ok(res, notice);
 });
 
-/** POST /admin/notices */
+/** POST /admin/notices — multipart (local dev) or JSON with pre-uploaded attachments[]. */
 export const createNotice = asyncHandler(async (req, res) => {
-  const attachments = await saveMany(req.files || [], 'notices');
+  const { attachments: jsonAttachments, ...body } = req.body;
+  const attachments = req.is('application/json') ? (jsonAttachments || []) : await saveMany(req.files || [], 'notices');
   const notice = await Notice.create({
-    ...req.body,
-    slug: await uniqueSlug(Notice, req.body.title),
-    excerpt: req.body.excerpt || String(req.body.body).replace(/<[^>]+>/g, '').slice(0, 220),
+    ...body,
+    slug: await uniqueSlug(Notice, body.title),
+    excerpt: body.excerpt || String(body.body).replace(/<[^>]+>/g, '').slice(0, 220),
     attachments,
     author: req.user._id,
   });
@@ -63,12 +95,18 @@ export const updateNotice = asyncHandler(async (req, res) => {
   const notice = await Notice.findById(req.params.id);
   if (!notice) throw ApiError.notFound('Notice not found');
   const before = notice.toObject();
+  const { attachments: newAttachments, ...rest } = req.body;
 
-  if (req.body.title && req.body.title !== notice.title) {
-    notice.slug = await uniqueSlug(Notice, req.body.title, notice._id);
+  if (rest.title && rest.title !== notice.title) {
+    notice.slug = await uniqueSlug(Notice, rest.title, notice._id);
   }
-  Object.assign(notice, req.body);
-  if (req.files?.length) notice.attachments.push(...(await saveMany(req.files, 'notices')));
+  Object.assign(notice, rest);
+  if (req.is('application/json')) {
+    const parsed = parseDescriptors(newAttachments);
+    if (parsed.length) notice.attachments.push(...parsed);
+  } else if (req.files?.length) {
+    notice.attachments.push(...(await saveMany(req.files, 'notices')));
+  }
   await notice.save();
 
   await recordAudit(req, { action: 'notice.update', entity: 'Notice', entityId: notice._id, before: { title: before.title }, after: { title: notice.title } });
@@ -117,8 +155,9 @@ export const getEvent = asyncHandler(async (req, res) => {
 });
 
 export const createEvent = asyncHandler(async (req, res) => {
-  const cover = req.file ? await saveFile(req.file, 'events') : undefined;
-  const event = await Event.create({ ...req.body, slug: await uniqueSlug(Event, req.body.title), cover });
+  const { cover: jsonCover, ...body } = req.body;
+  const cover = req.is('application/json') ? jsonCover : (req.file ? await saveFile(req.file, 'events') : undefined);
+  const event = await Event.create({ ...body, slug: await uniqueSlug(Event, body.title), cover });
   await recordAudit(req, { action: 'event.create', entity: 'Event', entityId: event._id });
   return created(res, event, 'Event created');
 });
@@ -126,9 +165,15 @@ export const createEvent = asyncHandler(async (req, res) => {
 export const updateEvent = asyncHandler(async (req, res) => {
   const event = await Event.findById(req.params.id);
   if (!event) throw ApiError.notFound('Event not found');
-  if (req.body.title && req.body.title !== event.title) event.slug = await uniqueSlug(Event, req.body.title, event._id);
-  Object.assign(event, req.body);
-  if (req.file) event.cover = await saveFile(req.file, 'events');
+  const { cover: jsonCover, ...rest } = req.body;
+  if (rest.title && rest.title !== event.title) event.slug = await uniqueSlug(Event, rest.title, event._id);
+  Object.assign(event, rest);
+  if (req.is('application/json')) {
+    const parsed = parseDescriptor(jsonCover);
+    if (parsed) event.cover = parsed;
+  } else if (req.file) {
+    event.cover = await saveFile(req.file, 'events');
+  }
   await event.save();
   return ok(res, event, 'Event updated');
 });
@@ -163,12 +208,13 @@ export const getAlbum = asyncHandler(async (req, res) => {
 });
 
 export const createAlbum = asyncHandler(async (req, res) => {
-  const photos = await saveMany(req.files || [], 'gallery');
+  const { photos: jsonPhotos, ...body } = req.body;
+  const photos = req.is('application/json') ? (jsonPhotos || []) : await saveMany(req.files || [], 'gallery');
   const album = await GalleryAlbum.create({
-    ...req.body,
-    slug: await uniqueSlug(GalleryAlbum, req.body.title),
-    photos: photos.map((p, i) => ({ ...p, order: i, alt: `${req.body.title} — photo ${i + 1}` })),
-    cover: photos[0] ? { url: photos[0].url, publicId: photos[0].publicId, alt: req.body.title } : undefined,
+    ...body,
+    slug: await uniqueSlug(GalleryAlbum, body.title),
+    photos: photos.map((p, i) => ({ ...p, order: i, alt: `${body.title} — photo ${i + 1}` })),
+    cover: photos[0] ? { url: photos[0].url, publicId: photos[0].publicId, alt: body.title } : undefined,
   });
   return created(res, album, 'Album created');
 });
@@ -176,7 +222,7 @@ export const createAlbum = asyncHandler(async (req, res) => {
 export const addAlbumPhotos = asyncHandler(async (req, res) => {
   const album = await GalleryAlbum.findById(req.params.id);
   if (!album) throw ApiError.notFound('Album not found');
-  const photos = await saveMany(req.files || [], 'gallery');
+  const photos = req.is('application/json') ? parseDescriptors(req.body.photos) : await saveMany(req.files || [], 'gallery');
   album.photos.push(...photos.map((p, i) => ({ ...p, order: album.photos.length + i })));
   if (!album.cover?.url && photos[0]) album.cover = { url: photos[0].url, publicId: photos[0].publicId };
   await album.save();
@@ -259,9 +305,16 @@ export const listDownloads = asyncHandler(async (req, res) => {
 });
 
 export const createDownload = asyncHandler(async (req, res) => {
-  if (!req.file) throw ApiError.badRequest('A file is required');
-  const file = await saveFile(req.file, 'downloads');
-  const item = await Download.create({ ...req.body, file });
+  const { file: jsonFile, ...body } = req.body;
+  let file;
+  if (req.is('application/json')) {
+    file = parseDescriptor(jsonFile);
+    if (!file) throw ApiError.badRequest('A file is required');
+  } else {
+    if (!req.file) throw ApiError.badRequest('A file is required');
+    file = await saveFile(req.file, 'downloads');
+  }
+  const item = await Download.create({ ...body, file });
   return created(res, item, 'File uploaded');
 });
 
@@ -298,16 +351,23 @@ export const listStaff = asyncHandler(async (req, res) => {
 });
 
 export const createStaff = asyncHandler(async (req, res) => {
-  const photo = req.file ? await saveFile(req.file, 'staff') : undefined;
-  const item = await Staff.create({ ...req.body, photo });
+  const { photo: jsonPhoto, ...body } = req.body;
+  const photo = req.is('application/json') ? jsonPhoto : (req.file ? await saveFile(req.file, 'staff') : undefined);
+  const item = await Staff.create({ ...body, photo });
   return created(res, item, 'Staff member added');
 });
 
 export const updateStaff = asyncHandler(async (req, res) => {
   const item = await Staff.findById(req.params.id);
   if (!item) throw ApiError.notFound('Staff member not found');
-  Object.assign(item, req.body);
-  if (req.file) item.photo = await saveFile(req.file, 'staff');
+  const { photo: jsonPhoto, ...rest } = req.body;
+  Object.assign(item, rest);
+  if (req.is('application/json')) {
+    const parsed = parseDescriptor(jsonPhoto);
+    if (parsed) item.photo = parsed;
+  } else if (req.file) {
+    item.photo = await saveFile(req.file, 'staff');
+  }
   await item.save();
   return ok(res, item, 'Staff member updated');
 });

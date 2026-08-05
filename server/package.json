@@ -36,7 +36,9 @@
   },
   "optionalDependencies": {
     "cloudinary": "^2.2.0",
-    "razorpay": "^2.9.4"
+    "razorpay": "^2.9.4",
+    "@upstash/ratelimit": "^2.0.3",
+    "@upstash/redis": "^1.34.3"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

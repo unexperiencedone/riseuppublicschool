@@ -8,6 +8,15 @@ import sendEmail from '../services/email.service.js';
 import env from '../config/env.js';
 import recordAudit from '../middleware/audit.js';
 import { nanoid } from 'nanoid';
+import { fileDescriptorSchema } from '../validators/common.validator.js';
+
+/** Same descriptor validation used across the JSON upload variants — see content.controller.js. */
+function parseDescriptor(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const result = fileDescriptorSchema.safeParse(raw);
+  if (!result.success) throw ApiError.unprocessable('Invalid upload descriptor', result.error.issues);
+  return result.data;
+}
 
 /** GET /admin/students */
 export const listStudents = asyncHandler(async (req, res) => {
@@ -39,8 +48,9 @@ export const getStudent = asyncHandler(async (req, res) => {
 });
 
 export const createStudent = asyncHandler(async (req, res) => {
-  const photo = req.file ? await saveFile(req.file, 'students') : undefined;
-  const student = await Student.create({ ...req.body, photo });
+  const { photo: jsonPhoto, ...body } = req.body;
+  const photo = req.is('application/json') ? parseDescriptor(jsonPhoto) : (req.file ? await saveFile(req.file, 'students') : undefined);
+  const student = await Student.create({ ...body, photo });
   await recordAudit(req, { action: 'student.create', entity: 'Student', entityId: student._id });
   return created(res, student, 'Student enrolled');
 });
@@ -48,8 +58,14 @@ export const createStudent = asyncHandler(async (req, res) => {
 export const updateStudent = asyncHandler(async (req, res) => {
   const student = await Student.findById(req.params.id);
   if (!student) throw ApiError.notFound('Student not found');
-  Object.assign(student, req.body);
-  if (req.file) student.photo = await saveFile(req.file, 'students');
+  const { photo: jsonPhoto, ...rest } = req.body;
+  Object.assign(student, rest);
+  if (req.is('application/json')) {
+    const parsed = parseDescriptor(jsonPhoto);
+    if (parsed) student.photo = parsed;
+  } else if (req.file) {
+    student.photo = await saveFile(req.file, 'students');
+  }
   await student.save();
   return ok(res, student, 'Student updated');
 });

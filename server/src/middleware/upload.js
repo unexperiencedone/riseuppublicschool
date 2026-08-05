@@ -34,3 +34,16 @@ const makeUploader = (allowed) => multer({
 export const uploadImage = makeUploader(IMAGE);
 export const uploadDocument = makeUploader(new RegExp(`${IMAGE.source}|${DOC.source}`));
 export const UPLOAD_ROOT = uploadRoot;
+
+/**
+ * Wraps a multer middleware so it only runs for multipart requests. JSON
+ * requests (already-uploaded Cloudinary descriptors — see
+ * docs/ARCHITECTURE.md § Serverless considerations) skip multer entirely and
+ * fall through to the controller, which reads the descriptor(s) from
+ * req.body instead of req.file(s). This keeps one route per resource instead
+ * of doubling the route table for local-dev-multipart vs. direct-upload-JSON.
+ */
+export const conditionalUpload = (multerMiddleware) => (req, res, next) => {
+  if (req.is('application/json')) return next();
+  return multerMiddleware(req, res, next);
+};

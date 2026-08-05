@@ -4,7 +4,7 @@ import * as admission from '../controllers/admission.controller.js';
 import * as portal from '../controllers/portal.controller.js';
 import validate from '../middleware/validate.js';
 import { publicFormLimiter } from '../middleware/rateLimiter.js';
-import { uploadDocument } from '../middleware/upload.js';
+import { uploadDocument, conditionalUpload } from '../middleware/upload.js';
 import { listQuery, slugParam } from '../validators/common.validator.js';
 import { enquirySchema } from '../validators/admission.validator.js';
 import { contactSchema, testimonialSchema } from '../validators/content.validator.js';
@@ -43,7 +43,8 @@ router.post('/testimonials', publicFormLimiter, validate({ body: testimonialSche
 
 /* Admission enquiry + full application */
 router.post('/admissions/enquiry', publicFormLimiter, validate({ body: enquirySchema }), admission.createEnquiry);
-router.post('/admissions/apply', publicFormLimiter, uploadDocument.array('documents', 8), admission.createApplication);
+router.post('/admissions/apply', publicFormLimiter, conditionalUpload(uploadDocument.array('documents', 8)), admission.createApplication);
+router.post('/admissions/upload-signature', publicFormLimiter, admission.createAdmissionUploadSignature);
 router.get('/admissions/track/:applicationNo', admission.trackApplication);
 
 /* Contact */

@@ -10,7 +10,7 @@ import logger from '../config/logger.js';
  * Swapping drivers requires no controller changes.
  */
 let cloudinary = null;
-async function getCloudinary() {
+export async function getCloudinary() {
   if (cloudinary) return cloudinary;
   const mod = await import('cloudinary');
   cloudinary = mod.v2;
@@ -51,6 +51,43 @@ export async function saveFile(file, folder = 'misc') {
 
 export async function saveMany(files = [], folder = 'misc') {
   return Promise.all(files.map((f) => saveFile(f, folder)));
+}
+
+const IMAGE_FORMATS = 'jpg,jpeg,png,webp,avif';
+const DOCUMENT_FORMATS = `${IMAGE_FORMATS},pdf,doc,docx`;
+const DOCUMENT_FOLDERS = new Set(['notices', 'downloads', 'admissions']);
+
+/**
+ * Signed-upload payload for direct browser → Cloudinary uploads (see
+ * web/lib/upload.js). We sign server-side with CLOUDINARY_API_SECRET — the
+ * secret never reaches the client — and `folder` + `allowed_formats` are
+ * baked into the signature, so a caller cannot redirect the upload to a
+ * different folder or a different file type after the fact (this replaces
+ * the MIME allowlist multer used to enforce for the multipart path).
+ *
+ * NOT covered here: a per-file size cap. Cloudinary's plain signed-upload
+ * endpoint has no signable "max bytes" parameter the way an upload preset
+ * does — enforcing one requires setting a file-size limit on the Cloudinary
+ * account/product-environment itself (Settings → Upload). Do that before
+ * relying on this path in production; see docs/ARCHITECTURE.md § Serverless considerations.
+ */
+export async function createUploadSignature(folder) {
+  const cld = await getCloudinary();
+  const timestamp = Math.round(Date.now() / 1000);
+  const fullFolder = `${env.storage.cloudinary.folder}/${folder}`;
+  const allowedFormats = DOCUMENT_FOLDERS.has(folder) ? DOCUMENT_FORMATS : IMAGE_FORMATS;
+  const signature = cld.utils.api_sign_request(
+    { timestamp, folder: fullFolder, allowed_formats: allowedFormats },
+    env.storage.cloudinary.apiSecret
+  );
+  return {
+    timestamp,
+    signature,
+    apiKey: env.storage.cloudinary.apiKey,
+    cloudName: env.storage.cloudinary.cloudName,
+    folder: fullFolder,
+    allowedFormats,
+  };
 }
 
 export async function deleteFile(publicId) {
