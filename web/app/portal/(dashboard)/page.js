@@ -71,25 +71,20 @@ export default function PortalDashboard() {
   ];
 
   return (
-    <div className="bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="container-page flex flex-wrap items-center justify-between gap-4 py-6">
-          <div>
-            <p className="eyebrow">Parent &amp; Student Portal</p>
-            <h1 className="mt-1 font-display text-2xl font-bold">
-              {student ? student.name : user?.name}
-            </h1>
-            {student && (
-              <p className="mt-1 text-sm text-slate-600">
-                Class {student.classLevel}-{student.section} · Admission No. {student.admissionNo}
-              </p>
-            )}
-          </div>
-          <button type="button" onClick={signOut} className="btn-outline">
-            <LogOut className="h-4 w-4" aria-hidden /> Sign out
-          </button>
+    <>
+      <div className="border-b border-slate-200 bg-white">
+        <div className="container-page py-6">
+          <p className="eyebrow">Parent &amp; Student Portal</p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-navy-800">
+            {student ? student.name : user?.name}
+          </h1>
+          {student && (
+            <p className="mt-1 text-sm text-slate-600">
+              Class {student.classLevel}-{student.section} · Admission No. {student.admissionNo}
+            </p>
+          )}
         </div>
-      </header>
+      </div>
 
       <div className="container-page space-y-8 py-8">
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -180,6 +175,6 @@ export default function PortalDashboard() {
           </section>
         )}
       </div>
-    </div>
+    </>
   );
 }
