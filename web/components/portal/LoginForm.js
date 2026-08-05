@@ -22,7 +22,7 @@ export default function LoginForm({ redirectTo = '/portal', title = 'Parent & St
     setError(''); setStatus('submitting');
     try {
       const data = await login(form.email.trim().toLowerCase(), form.password);
-      if (data.user.mustChangePassword) router.push('/portal/change-password');
+      if (data.user.mustChangePassword) router.push(`/portal/change-password?redirectTo=${encodeURIComponent(redirectTo)}`);
       else router.push(redirectTo);
     } catch (err) {
       setError(err.message);
