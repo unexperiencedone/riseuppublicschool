@@ -13,7 +13,7 @@ import routes from './routes/index.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
-import { UPLOAD_ROOT } from './middleware/upload.js';
+import { UPLOAD_ROOT, USE_LOCAL_DISK } from './middleware/upload.js';
 
 const app = express();
 
@@ -52,10 +52,13 @@ app.use(compression());
 if (!env.isProd) app.use(morgan('dev'));
 else app.use(morgan('combined'));
 
-/* ── 7. Static uploads (local storage driver only — dead weight on Vercel,
-   whose filesystem is read-only outside /tmp, so this mount is skipped
-   entirely unless STORAGE_DRIVER=local) ── */
-if (env.storage.driver === 'local') {
+/* ── 7. Static uploads (only when middleware/upload.js actually wrote to
+   local disk — USE_LOCAL_DISK, not env.storage.driver alone, so this can't
+   drift out of sync with what multer's storage engine is doing. On
+   serverless, STORAGE_DRIVER defaults to 'local' if someone forgets to set
+   it to 'cloudinary', but uploads still land in memory/Cloudinary, not disk —
+   mounting on env.storage.driver alone would silently serve an empty dir) ── */
+if (USE_LOCAL_DISK) {
   app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '30d', etag: true }));
 }
 
