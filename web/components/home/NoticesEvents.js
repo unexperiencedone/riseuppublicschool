@@ -83,8 +83,8 @@ export default function NoticesEvents({ notices = [], events = [] }) {
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-navy-800">{e.title}</p>
                     <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden />
-                      {style.label} · {formatEventDate(e.date, e.endDate)}
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden />
+                      <span className="min-w-0 truncate">{style.label} · {formatEventDate(e.date, e.endDate)}</span>
                     </p>
                   </div>
                 </li>
