@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import { CalendarDays, ClipboardList, GraduationCap, Users } from 'lucide-react';
 import { PageHero, SectionHeading, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 import { STAGES } from '@/components/home/Stages';
 import { SCHOOL } from '@/lib/config';
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Academics — Curriculum & Examination Pattern',
-  description: `Curriculum, subjects and examination pattern at ${SCHOOL.name} for Play Group to Class XII, session ${SCHOOL.session}.`,
-};
+  description: `Curriculum, subjects and examination pattern at ${SCHOOL.name} for ${SCHOOL.classesOffered}, session ${SCHOOL.session}.`,
+  path: '/academics',
+});
 
 const ASSESSMENTS = [
   { name: 'Unit Test I', when: 'May 2026', weight: 'Formative', detail: 'Short written tests across core subjects, held over four days.' },

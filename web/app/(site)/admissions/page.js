@@ -4,11 +4,14 @@ import { PageHero, SectionHeading } from '@/components/ui';
 import { STEPS } from '@/components/home/AdmissionSteps';
 import EnquiryForm from '@/components/forms/EnquiryForm';
 import { SCHOOL } from '@/lib/config';
+import { buildMetadata, JsonLd, faqSchema, breadcrumbSchema } from '@/lib/seo';
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Admissions 2026-27 — Apply Online',
-  description: `Admissions open at ${SCHOOL.name}, Pipargaon Aurai Bhadohi for Play Group to Class XII, session ${SCHOOL.session}. No donation, no capitation fee. Apply online or call ${SCHOOL.phoneDisplay}.`,
-};
+  description: `Admissions open at ${SCHOOL.name}, Pipargaon Aurai Bhadohi for ${SCHOOL.classesOffered}, session ${SCHOOL.session}. No donation, no capitation fee. Apply online or call ${SCHOOL.phoneDisplay}.`,
+  path: '/admissions',
+  keywords: ['admission Bhadohi 2026', 'school admission Aurai', 'CBSE admission Sant Ravidas Nagar', 'nursery admission Bhadohi'],
+});
 
 const DOCUMENTS = [
   { doc: 'Birth certificate (original + photocopy)', when: 'All classes' },
@@ -32,6 +35,9 @@ const FAQS = [
 export default function AdmissionsPage() {
   return (
     <>
+      <JsonLd data={faqSchema(FAQS)} />
+      <JsonLd data={breadcrumbSchema([{ name: 'Admissions', path: '/admissions' }])} />
+
       <PageHero eyebrow={`Session ${SCHOOL.session}`} title="Admissions are open"
         subtitle={`${SCHOOL.classesOffered}. No donation, no capitation fee — the same process for every family.`}
         breadcrumb={[{ label: 'Admissions' }]} />

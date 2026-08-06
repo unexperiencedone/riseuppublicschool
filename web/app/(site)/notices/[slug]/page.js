@@ -5,6 +5,7 @@ import { apiGet } from '@/lib/api';
 import { fallbackNotices } from '@/lib/fallback';
 import { CATEGORY_STYLES } from '@/lib/calendar';
 import { PageHero, Prose, CtaBanner } from '@/components/ui';
+import { buildMetadata, JsonLd, articleSchema, breadcrumbSchema } from '@/lib/seo';
 
 export const revalidate = 120;
 
@@ -15,11 +16,13 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }) {
   const notice = await getNotice(params.slug);
   if (!notice) return { title: 'Notice not found' };
-  return {
+  return buildMetadata({
     title: notice.title,
-    description: notice.excerpt || String(notice.body).slice(0, 155),
-    openGraph: { title: notice.title, description: notice.excerpt, type: 'article' },
-  };
+    description: notice.excerpt || String(notice.body).replace(/\s+/g, ' ').slice(0, 155),
+    path: `/notices/${params.slug}`,
+    type: 'article',
+    publishedTime: notice.publishAt,
+  });
 }
 
 async function getNotice(slug) {
@@ -37,6 +40,18 @@ export default async function NoticePage({ params }) {
 
   return (
     <>
+      <JsonLd data={articleSchema({
+        title: notice.title,
+        description: notice.excerpt || '',
+        path: `/notices/${params.slug}`,
+        published: notice.publishAt,
+        modified: notice.updatedAt,
+      })} />
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Notices', path: '/notices' },
+        { name: notice.title, path: `/notices/${params.slug}` },
+      ])} />
+
       <PageHero eyebrow={notice.category} title={notice.title}
         breadcrumb={[{ label: 'Notices', href: '/notices' }, { label: 'Notice' }]} />
 

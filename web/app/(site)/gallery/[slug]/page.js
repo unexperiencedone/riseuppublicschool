@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { fallbackAlbums } from '@/lib/fallback';
 import { PageHero } from '@/components/ui';
+import { buildMetadata, JsonLd, breadcrumbSchema } from '@/lib/seo';
 import Lightbox from '@/components/Lightbox';
 
 export const revalidate = 600;
@@ -20,11 +21,12 @@ async function getAlbum(slug) {
 export async function generateMetadata({ params }) {
   const album = await getAlbum(params.slug);
   if (!album) return { title: 'Album not found' };
-  return {
+  return buildMetadata({
     title: album.title,
-    description: album.description,
-    openGraph: { title: album.title, description: album.description, images: album.cover?.url ? [album.cover.url] : [] },
-  };
+    description: album.description || `Photographs from ${album.title} at Rise UP Public School.`,
+    path: `/gallery/${params.slug}`,
+    image: album.cover?.url,
+  });
 }
 
 export default async function AlbumPage({ params }) {
@@ -35,6 +37,11 @@ export default async function AlbumPage({ params }) {
 
   return (
     <>
+      <JsonLd data={breadcrumbSchema([
+        { name: 'Gallery', path: '/gallery' },
+        { name: album.title, path: `/gallery/${params.slug}` },
+      ])} />
+
       <PageHero eyebrow={album.category} title={album.title} subtitle={album.description}
         image={album.cover?.url || '/images/campus/school-building.jpg'}
         breadcrumb={[{ label: 'Gallery', href: '/gallery' }, { label: album.title }]} />

@@ -28,6 +28,22 @@ export const SCHOOL = {
     manager: { name: 'Mr. Adarsh Dubey', role: 'School Manager', phone: '8052397504' },
   },
   session: '2026-27',
+
+  /**
+   * Fill these in as the school's accounts go live.
+   * Every non-empty https URL is emitted as schema.org `sameAs`, which is how
+   * Google links the website to the social profiles in a knowledge panel.
+   * twitterHandle drives twitter:site / twitter:creator — include the @.
+   */
+  social: {
+    facebook: '',
+    instagram: '',
+    youtube: '',
+    linkedin: '',
+    twitter: '',
+    twitterHandle: '',
+    whatsapp: 'https://wa.me/919170285353',
+  },
 };
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://localhost:5000/api/v1';

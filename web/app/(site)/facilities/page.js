@@ -2,11 +2,13 @@ import Image from 'next/image';
 import { Monitor, FlaskConical, BookOpen, Trophy, Bus, ShieldCheck, Music, Map, Utensils, HeartPulse } from 'lucide-react';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Campus & Facilities',
   description: `Digital classrooms, science and computer laboratories, library, sports grounds, GPS-enabled transport and CCTV safety at ${SCHOOL.name}.`,
-};
+  path: '/facilities',
+});
 
 const FACILITIES = [
   { Icon: Monitor, title: 'Digital Smart Classrooms', text: 'Projector-enabled classrooms with digital content mapped to the syllabus. Difficult concepts — a cell dividing, a chemical reaction, a historical map — are shown, not just described.', image: '/images/gallery/science-exhibition.jpg' },

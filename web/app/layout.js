@@ -5,34 +5,50 @@ import { SCHOOL, SITE_URL } from '@/lib/config';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces', display: 'swap', weight: ['600', '700'] });
 
+const DESCRIPTION = `${SCHOOL.name}, Pipargaon (Aurai), Sant Ravidas Nagar Bhadohi — an English medium, CBSE pattern school for ${SCHOOL.classesOffered}. Established ${SCHOOL.established}. Admissions open for session ${SCHOOL.session}. Call ${SCHOOL.phoneDisplay}.`;
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: `${SCHOOL.name} — English Medium CBSE Pattern School, Pipargaon Aurai Bhadohi`,
     template: `%s | ${SCHOOL.name}`,
   },
-  description: `${SCHOOL.name}, Pipargaon (Aurai), Sant Ravidas Nagar Bhadohi — an English medium, CBSE pattern school for Play Group to Class XII. Established 2024. Admissions open for session 2026-27. Call ${SCHOOL.phoneDisplay}.`,
-  keywords: ['school in Aurai', 'CBSE school Bhadohi', 'English medium school Pipargaon', 'Rise UP Public School', 'best school Sant Ravidas Nagar', 'admission Bhadohi 2026'],
-  authors: [{ name: SCHOOL.name }],
-  openGraph: {
-    type: 'website', locale: 'en_IN', siteName: SCHOOL.name, url: SITE_URL,
-    title: `${SCHOOL.name} — Pipargaon, Aurai, Bhadohi`,
-    description: `English medium, CBSE pattern school for Play Group to Class XII. Admissions open for ${SCHOOL.session}.`,
-    images: [{ url: '/images/campus/school-building.jpg', width: 1800, height: 700, alt: `${SCHOOL.name} campus` }],
+  description: DESCRIPTION,
+  applicationName: SCHOOL.name,
+  keywords: [
+    'school in Aurai', 'CBSE school Bhadohi', 'English medium school Pipargaon',
+    'Rise UP Public School', 'best school Sant Ravidas Nagar', 'admission Bhadohi 2026',
+    'Rise UP Public School Bhadohi', 'nursery admission Aurai', 'school near me Bhadohi',
+  ],
+  authors: [{ name: SCHOOL.name, url: SITE_URL }],
+  creator: SCHOOL.name,
+  publisher: SCHOOL.trust,
+  category: 'education',
+  manifest: '/manifest.webmanifest',
+  formatDetection: { telephone: true, address: true, email: true },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true, follow: true,
+      'max-image-preview': 'large', 'max-snippet': -1, 'max-video-preview': -1,
+    },
   },
-  twitter: { card: 'summary_large_image' },
-  robots: { index: true, follow: true },
+  // Paste the token Google Search Console gives you, then redeploy.
+  verification: { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined },
   alternates: { canonical: '/' },
 };
 
-export const viewport = { themeColor: '#0B5D34', width: 'device-width', initialScale: 1 };
+export const viewport = {
+  themeColor: '#0B5D34',
+  width: 'device-width',
+  initialScale: 1,
+  colorScheme: 'light',
+};
 
 /**
  * Root layout deliberately holds NOTHING but <html> and <body>.
- *
- * Public chrome (header, footer, floating call buttons) lives in app/(site)/layout.js
- * so it never renders inside /admin or /portal. A staff console showing an
- * "Apply Now" button and a public footer is confusing and looks unprofessional.
+ * Public chrome lives in app/(site)/layout.js so it never renders in /admin or /portal.
  */
 export default function RootLayout({ children }) {
   return (

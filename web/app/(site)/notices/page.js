@@ -4,12 +4,14 @@ import { apiGet } from '@/lib/api';
 import { fallbackNotices } from '@/lib/fallback';
 import { CATEGORY_STYLES } from '@/lib/calendar';
 import { PageHero, EmptyState } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 120;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Notices & Circulars',
   description: 'Latest notices, circulars and announcements from Rise UP Public School, Pipargaon Aurai Bhadohi.',
-};
+  path: '/notices',
+});
 
 const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 

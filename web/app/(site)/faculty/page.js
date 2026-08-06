@@ -4,12 +4,14 @@ import { apiGet } from '@/lib/api';
 import { fallbackStaff } from '@/lib/fallback';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Our Faculty & Leadership',
   description: `Meet the leadership and teaching team at ${SCHOOL.name}, Pipargaon Aurai Bhadohi.`,
-};
+  path: '/faculty',
+});
 
 const initials = (name) => name.replace(/^(Mr\.|Mrs\.|Ms\.|Dr\.)\s*/i, '').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 

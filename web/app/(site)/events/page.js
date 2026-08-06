@@ -3,12 +3,14 @@ import { CalendarDays } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { PageHero, SectionHeading } from '@/components/ui';
 import { ACADEMIC_CALENDAR, CATEGORY_STYLES, formatEventDate } from '@/lib/calendar';
+import { buildMetadata, JsonLd, eventSchema, breadcrumbSchema } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'School Events',
   description: 'Upcoming and recent events at Rise UP Public School — Sports Week, Science Exhibition, Annual Function, PTMs and celebrations.',
-};
+  path: '/events',
+});
 
 const HIGHLIGHTS = [
   { title: 'Annual Sports Day', when: '05 December 2026', text: 'Athletics, relay races, kabaddi, kho-kho, karate demonstration and the inter-house march past — preceded by a full Sports Week.', image: '/images/gallery/sports-day-medal-winners.jpg' },
@@ -29,6 +31,16 @@ export default async function EventsPage() {
 
   return (
     <>
+      <JsonLd data={breadcrumbSchema([{ name: 'Events', path: '/events' }])} />
+      {upcoming.slice(0, 10).map((e, i) => (
+        <JsonLd key={`ev-${i}`} data={eventSchema({
+          title: e.title,
+          startDate: e.date,
+          endDate: e.endDate,
+          venue: 'Rise UP Public School Campus',
+        })} />
+      ))}
+
       <PageHero eyebrow="Campus Life" title="Events at Rise UP"
         subtitle="Sport, science, culture and ceremony — the calendar that makes school more than the syllabus."
         breadcrumb={[{ label: 'Events' }]} />

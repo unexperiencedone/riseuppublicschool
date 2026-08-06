@@ -1,12 +1,14 @@
 import { Phone, Mail, MapPin, Clock, User } from 'lucide-react';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 import ContactForm from '@/components/forms/ContactForm';
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Contact Us',
   description: `Contact ${SCHOOL.name}, Pipargaon Aurai, Sant Ravidas Nagar Bhadohi, Uttar Pradesh 221301. Phone ${SCHOOL.phoneDisplay}, email ${SCHOOL.email}.`,
-};
+  path: '/contact',
+});
 
 const CONTACTS = [
   { Icon: MapPin, label: 'Address', value: SCHOOL.address.full },

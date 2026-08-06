@@ -3,12 +3,14 @@ import { Info, Phone, IndianRupee } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading, EmptyState } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Fee Structure 2026-27',
   description: `Published fee structure for ${SCHOOL.name}, session ${SCHOOL.session}. No donation or capitation fee.`,
-};
+  path: '/admissions/fees',
+});
 
 const money = (n) => (n ? `₹ ${Number(n).toLocaleString('en-IN')}` : '—');
 

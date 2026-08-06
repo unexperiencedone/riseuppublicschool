@@ -3,12 +3,14 @@ import { FileText, AlertTriangle, ExternalLink } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 3600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Mandatory Public Disclosure',
   description: `Mandatory public disclosure — general, academic, staff and infrastructure information for ${SCHOOL.name}, Pipargaon Aurai Bhadohi.`,
-};
+  path: '/mandatory-disclosure',
+});
 
 const GENERAL = [
   ['Name of the school', SCHOOL.name],

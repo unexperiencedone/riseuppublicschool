@@ -21,13 +21,26 @@ export default function Footer() {
             Run by the {SCHOOL.trust}. Established in {SCHOOL.established}, offering {SCHOOL.classesOffered} in
             {' '}{SCHOOL.address.district}, Uttar Pradesh.
           </p>
-          <div className="mt-5 flex gap-2">
-            {[{ Icon: Facebook, label: 'Facebook' }, { Icon: Instagram, label: 'Instagram' }, { Icon: Youtube, label: 'YouTube' }].map(({ Icon, label }) => (
-              <a key={label} href="#" aria-label={label} className="rounded-lg bg-white/10 p-2.5 text-white transition hover:bg-gold-500 hover:text-navy-800">
-                <Icon className="h-4 w-4" />
-              </a>
-            ))}
-          </div>
+          {/* Only renders links that actually exist — an icon pointing at "#"
+              looks broken and hurts trust more than having no icon at all. */}
+          {(() => {
+            const links = [
+              { Icon: Facebook, label: 'Facebook', href: SCHOOL.social.facebook },
+              { Icon: Instagram, label: 'Instagram', href: SCHOOL.social.instagram },
+              { Icon: Youtube, label: 'YouTube', href: SCHOOL.social.youtube },
+            ].filter((l) => l.href);
+            if (!links.length) return null;
+            return (
+              <div className="mt-5 flex gap-2">
+                {links.map(({ Icon, label, href }) => (
+                  <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}
+                    className="rounded-lg bg-white/10 p-2.5 text-white transition hover:bg-gold-500 hover:text-navy-800">
+                    <Icon className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Explore */}

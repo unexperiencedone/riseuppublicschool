@@ -4,12 +4,14 @@ import { Camera } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { fallbackAlbums } from '@/lib/fallback';
 import { PageHero, EmptyState } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Photo Gallery',
   description: 'Photographs from Sports Day, the Science Exhibition, the Annual Function, investiture ceremonies and educational tours at Rise UP Public School.',
-};
+  path: '/gallery',
+});
 
 export default async function GalleryPage() {
   const albums = (await apiGet('/gallery?limit=40', { fallback: fallbackAlbums, tags: ['gallery'] })) || [];

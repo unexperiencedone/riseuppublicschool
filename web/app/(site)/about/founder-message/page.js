@@ -1,12 +1,14 @@
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, Prose, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Founder's Message",
   description: `A message from ${SCHOOL.leadership.founder.name}, Founder & CEO of ${SCHOOL.name}.`,
-};
+  path: '/about/founder-message',
+});
 
 const FALLBACK = { body: `Rise UP Public School began with a question I could not stop asking: why should a child's postcode decide the quality of their schooling?
 Through the Rise UP Public Shiksha Seva Samiti Trust, we set out to build in Pipargaon a school of the standard families here usually have to travel to Bhadohi or Varanasi to find — English medium, CBSE pattern, digitally equipped, and affordable.

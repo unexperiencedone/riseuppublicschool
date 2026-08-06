@@ -1,12 +1,14 @@
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, Prose, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Principal's Message",
   description: `A message from ${SCHOOL.leadership.principal.name}, Principal of ${SCHOOL.name}.`,
-};
+  path: '/about/principal-message',
+});
 
 const FALLBACK = { body: `Dear Parents and Students,
 Welcome to Rise UP Public School.

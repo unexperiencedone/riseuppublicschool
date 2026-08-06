@@ -2,12 +2,14 @@ import { FileText, Download as DownloadIcon } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { fallbackDownloads } from '@/lib/fallback';
 import { PageHero, SectionHeading, EmptyState } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Downloads & Forms',
   description: 'Download the academic calendar, admission forms, syllabus, transport routes and other documents from Rise UP Public School.',
-};
+  path: '/downloads',
+});
 
 const GROUPS = [
   { key: 'calendar', label: 'Academic Calendar' },

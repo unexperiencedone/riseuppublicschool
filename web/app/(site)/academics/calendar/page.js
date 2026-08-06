@@ -1,13 +1,15 @@
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, CtaBanner } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 import CalendarView from '@/components/CalendarView';
 
 export const revalidate = 3600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Academic Calendar 2026-27',
   description: `Complete academic calendar for ${SCHOOL.name}, session 2026-27 — examination dates, parent-teacher meetings, holidays, sports week and cultural events.`,
-};
+  path: '/academics/calendar',
+});
 
 export default async function CalendarPage() {
   const events = await apiGet('/events?session=2026-27', { fallback: [], tags: ['events'] });

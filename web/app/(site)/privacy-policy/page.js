@@ -1,12 +1,14 @@
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, Prose } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 3600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Privacy Policy',
   description: `How ${SCHOOL.name} collects, uses and protects the personal information shared through this website.`,
-};
+  path: '/privacy-policy',
+});
 
 const FALLBACK = { body: `Rise UP Public School collects personal information through this website only for the purposes of processing admission enquiries, responding to messages, and operating the student and parent portal.
 WHAT WE COLLECT — Name, mobile number, email address, the child's name, date of birth and the class applied for; and, for enrolled students, academic and fee records.

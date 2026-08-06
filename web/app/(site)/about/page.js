@@ -4,12 +4,14 @@ import { Target, Eye, Heart, ArrowRight } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { SCHOOL } from '@/lib/config';
 import { PageHero, SectionHeading, CtaBanner, Prose } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 
 export const revalidate = 600;
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'About the School',
   description: `${SCHOOL.name} was founded in 2024 by the ${SCHOOL.trust} to bring English-medium, CBSE-pattern education to Pipargaon, Aurai, Bhadohi.`,
-};
+  path: '/about',
+});
 
 const FALLBACK = {
   body: `Rise UP Public School was founded in 2024 by the Rise UP Public Shiksha Seva Samiti Trust with a simple conviction: a child growing up in rural Bhadohi deserves exactly the same quality of education as a child in any metropolitan city.

@@ -1,11 +1,13 @@
 import { PageHero } from '@/components/ui';
+import { buildMetadata } from '@/lib/seo';
 import TrackForm from '@/components/forms/TrackForm';
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: 'Track Your Admission Application',
   description: 'Check the current status of your admission enquiry or application at Rise UP Public School.',
-  robots: { index: false, follow: true },
-};
+  path: '/admissions/track',
+  noIndex: true,
+});
 
 export default function TrackPage() {
   return (
