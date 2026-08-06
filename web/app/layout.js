@@ -34,8 +34,8 @@ export const metadata = {
       'max-image-preview': 'large', 'max-snippet': -1, 'max-video-preview': -1,
     },
   },
-  // Paste the token Google Search Console gives you, then redeploy.
-  verification: { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined },
+  // Google Search Console — Settings → Ownership verification → HTML tag.
+  verification: { google: 'qxF9nBpDsaBObqO_sLtPqgH8c3z_egbj86LDXbuz2pY' },
   alternates: { canonical: '/' },
 };
 
