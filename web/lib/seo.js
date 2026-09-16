@@ -30,12 +30,17 @@ export function buildMetadata({
   keywords,
 } = {}) {
   const url = `${SITE_URL}${path}`;
+  const titleString = typeof title === 'object' && title?.absolute ? title.absolute : title;
+  const fullTitle = titleString
+    ? (title?.absolute ? title.absolute : `${titleString} | ${SCHOOL.name}`)
+    : `${SCHOOL.name} — ${SCHOOL.tagline}`;
+
   const images = image
-    ? [{ url: image, width: 1200, height: 630, alt: title || SCHOOL.name }]
+    ? [{ url: image, width: 1200, height: 630, alt: titleString || SCHOOL.name }]
     : [{ ...OG_IMAGE, alt: `${SCHOOL.name} — ${SCHOOL.tagline}` }];
 
   return {
-    title,
+    ...(title ? { title } : {}),
     description,
     ...(keywords ? { keywords } : {}),
     alternates: { canonical: url },
@@ -45,14 +50,14 @@ export function buildMetadata({
       locale: 'en_IN',
       siteName: SCHOOL.name,
       url,
-      title: title ? `${title} | ${SCHOOL.name}` : SCHOOL.name,
+      title: fullTitle,
       description,
       images,
       ...(publishedTime ? { publishedTime } : {}),
     },
     twitter: {
       card: 'summary_large_image',
-      title: title ? `${title} | ${SCHOOL.name}` : SCHOOL.name,
+      title: fullTitle,
       description,
       images: images.map((i) => i.url),
       ...(SCHOOL.social.twitterHandle ? { site: SCHOOL.social.twitterHandle, creator: SCHOOL.social.twitterHandle } : {}),
@@ -64,15 +69,39 @@ export function buildMetadata({
 
 const sameAs = () => Object.values(SCHOOL.social).filter((v) => typeof v === 'string' && v.startsWith('http'));
 
+/**
+ * WebSite schema — Google Search uses this specifically to determine and display
+ * the Site Name above the search snippet instead of the fallback domain name.
+ * Requirements: https://developers.google.com/search/docs/appearance/site-names
+ */
+export const websiteSchema = () => ({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': `${SITE_URL}/#website`,
+  name: SCHOOL.name,
+  alternateName: [
+    'Rise Up Public School',
+    SCHOOL.shortName,
+    'Rise Up Public School Pipargaon',
+    'Rise Up Public School Aurai',
+    'Rise UP Public School Bhadohi',
+    'RUPS Bhadohi',
+    SCHOOL.trust,
+  ].filter(Boolean),
+  url: `${SITE_URL}/`,
+  publisher: { '@id': `${SITE_URL}/#school` },
+  inLanguage: 'en-IN',
+});
+
 /** schema.org/School — the entity Google uses for the knowledge panel. */
 export const schoolSchema = () => ({
   '@context': 'https://schema.org',
   '@type': ['School', 'EducationalOrganization'],
   '@id': `${SITE_URL}/#school`,
   name: SCHOOL.name,
-  alternateName: SCHOOL.trust,
+  alternateName: [SCHOOL.trust, 'Rise Up Public School', SCHOOL.shortName].filter(Boolean),
   foundingDate: String(SCHOOL.established),
-  url: SITE_URL,
+  url: `${SITE_URL}/`,
   logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon.png`, width: 512, height: 512 },
   image: `${SITE_URL}/opengraph-image.jpg`,
   telephone: `+91${SCHOOL.phone}`,

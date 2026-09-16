@@ -59,7 +59,10 @@ export const API_URL = stripSlash(
   process.env.NEXT_PUBLIC_API_URL || process.env.API_URL,
   'http://localhost:5000/api/v1',
 );
-export const SITE_URL = stripSlash(process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000');
+export const SITE_URL = stripSlash(
+  process.env.NEXT_PUBLIC_SITE_URL,
+  'https://www.riseuppublicschool.com',
+);
 export const REVALIDATE = Number(process.env.REVALIDATE_SECONDS || 300);
 
 export const NAV = [

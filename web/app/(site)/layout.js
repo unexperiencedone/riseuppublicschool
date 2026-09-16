@@ -1,25 +1,14 @@
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import FloatingActions from '@/components/FloatingActions';
-import { JsonLd, schoolSchema } from '@/lib/seo';
-import { SITE_URL, SCHOOL } from '@/lib/config';
-
-const websiteSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  '@id': `${SITE_URL}/#website`,
-  url: SITE_URL,
-  name: SCHOOL.name,
-  publisher: { '@id': `${SITE_URL}/#school` },
-  inLanguage: 'en-IN',
-};
+import { JsonLd, schoolSchema, websiteSchema } from '@/lib/seo';
 
 /** Public website chrome. Not applied to /admin or /portal. */
 export default function SiteLayout({ children }) {
   return (
     <>
       <JsonLd data={schoolSchema()} />
-      <JsonLd data={websiteSchema} />
+      <JsonLd data={websiteSchema()} />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-white">
         Skip to main content
       </a>

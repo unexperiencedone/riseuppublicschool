@@ -16,6 +16,9 @@ import { SCHOOL } from '@/lib/config';
 export const revalidate = 300;
 
 export const metadata = buildMetadata({
+  title: {
+    absolute: `${SCHOOL.name} — English Medium CBSE Pattern School, Pipargaon Aurai Bhadohi`,
+  },
   description: `${SCHOOL.name}, Pipargaon (Aurai), Sant Ravidas Nagar Bhadohi — English medium, CBSE pattern school for ${SCHOOL.classesOffered}. Admissions open for session ${SCHOOL.session}. Call ${SCHOOL.phoneDisplay}.`,
   path: '/',
 });

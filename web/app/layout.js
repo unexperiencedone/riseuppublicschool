@@ -37,6 +37,21 @@ export const metadata = {
   // Google Search Console — Settings → Ownership verification → HTML tag.
   verification: { google: 'qxF9nBpDsaBObqO_sLtPqgH8c3z_egbj86LDXbuz2pY' },
   alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    locale: 'en_IN',
+    siteName: SCHOOL.name,
+    title: `${SCHOOL.name} — English Medium CBSE Pattern School, Pipargaon Aurai Bhadohi`,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    images: [{ url: `${SITE_URL}/opengraph-image.jpg`, width: 1200, height: 630, alt: `${SCHOOL.name} — ${SCHOOL.tagline}` }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${SCHOOL.name} — English Medium CBSE Pattern School, Pipargaon Aurai Bhadohi`,
+    description: DESCRIPTION,
+    images: [`${SITE_URL}/opengraph-image.jpg`],
+  },
 };
 
 export const viewport = {
